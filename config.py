@@ -3,7 +3,7 @@
 import pytz
 
 # ── App ──────────────────────────────────────────────────
-APP_NAME = "Saham Monitor 🇮🇩"
+APP_NAME = "Deeptick Terminal ⚡"
 APP_VERSION = "1.0.0"
 DB_PATH = "stock.db"
 

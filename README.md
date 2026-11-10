@@ -1,99 +1,118 @@
-# 📊 Saham Monitor 🇮🇩
+# ⚡ deeptick
 
-Aplikasi pemantau saham IDX (Bursa Efek Indonesia) yang berjalan **lokal** di komputermu.
+> High-performance quantitative market intelligence, multi-factor momentum screening, and algorithmic execution workstation.
 
-## ✨ Fitur
+[![Python Version](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
+[![UI Framework](https://img.shields.io/badge/framework-Streamlit-FF4B4B.svg)](https://streamlit.io/)
+[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-- **📊 Dashboard** — Grafik candlestick interaktif + indikator teknikal (RSI, MA, MACD, Bollinger Bands)
-- **💼 Portfolio** — Catat transaksi beli/jual, hitung P&L otomatis, pie chart komposisi
-- **🔬 Research** — Analisis mendalam teknikal + fundamental (PE, PBV, ROE, DER) per saham
-- **🚦 Signals** — Sinyal BUY/SELL otomatis berdasarkan multi-indikator scoring
-- **⚙️ Settings** — Kelola watchlist, alert rules, konfigurasi broker
-- **🔔 Notifikasi desktop** otomatis saat ada sinyal beli/jual
+---
 
-## 🚀 Cara Menjalankan
+## 🧭 Overview
 
-### 1. Install Dependencies
+**deeptick** is an advanced quantitative intelligence terminal built for active market participants. It integrates real-time macro regime classification, multi-timeframe technical momentum tracking, order flow anchor zones, and algorithmic forecasting into a single unified workspace.
+
+---
+
+## ✨ Core Modules
+
+- **🌐 Macro Regime & Market Pulse**  
+  Real-time market index regime classification (Risk-On / Selective / Risk-Off), trend structure, moving average spreads, and breadth dynamics.
+
+- **⚡ Momentum & Scalping Terminal**  
+  Algorithmic anchor entry points, smart money accumulation scoring, tight stop-loss buffers, and dynamic risk/reward target matrix.
+
+- **🔬 Deep Research & Multi-Factor Forecast**  
+  Comprehensive multi-factor analytics: technical indicator matrix, stochastic oscillators, ATR-based volatility projections, and valuation metrics.
+
+- **🚦 Signal Engine & Quantitative Scoring**  
+  Multi-indicator algorithmic scoring engine with real-time consensus filters.
+
+- **💼 Portfolio & Risk Ledger**  
+  Real-time position monitoring, automated P&L calculation, risk allocation charts, and trade journaling.
+
+- **⚡ Real-Time Tape & Flow Monitor**  
+  High-frequency transaction stream simulation, order book pressure, and tape-reading dynamics.
+
+---
+
+## 🚀 Quick Start
+
+### 1. Requirements
+
+Ensure you have **Python 3.10+** installed.
+
+```bash
+git clone https://github.com/Akbarhrmwn-17/deeptick.git
+cd deeptick
+```
+
+### 2. Install Dependencies
 
 ```bash
 python3 -m pip install -r requirements.txt --user --break-system-packages
 ```
 
-### 2. Jalankan App
+### 3. Launch Workstation
 
 ```bash
 bash run.sh
 ```
 
-Atau langsung:
+Or run directly via Streamlit:
 
 ```bash
 streamlit run app.py
 ```
 
-Buka browser ke **http://localhost:8501**
+Open your browser at **`http://localhost:8501`**
 
-## 📦 Tech Stack
+---
 
-| Komponen | Teknologi |
+## 🛠️ Tech Architecture
+
+| Layer | Technology |
 |---|---|
-| UI | Streamlit |
-| Database | SQLite (lokal, file `stock.db`) |
-| Grafik | Plotly |
-| Data Harga | Yahoo Finance (`yfinance`) — ticker format `BBCA.JK` |
-| Indikator | pandas-ta |
-| Scheduler | APScheduler |
-| Notifikasi | plyer |
+| **Core UI** | Streamlit (Custom Dark Theme Engine) |
+| **Data Engine** | Yahoo Finance Financial API |
+| **Analytics** | Pandas, NumPy, pandas-ta |
+| **Visualization** | Plotly Interactive Visuals |
+| **Storage Engine** | Local SQLite Database (`stock.db`) |
+| **Scheduler** | APScheduler Background Worker |
+| **Alerts** | Low-latency Desktop Notification Daemon |
 
-## 📁 Struktur
+---
+
+## 📁 Repository Structure
 
 ```
-saham-monitor/
-├── app.py              # Entry point
-├── config.py           # Konfigurasi global
-├── run.sh              # Script jalankan app
-├── requirements.txt
-├── stock.db            # Database SQLite (auto-created)
+deeptick/
+├── app.py              # Application entry point & master dashboard
+├── config.py           # Engine & parameter configuration
+├── run.sh              # Local workstation launcher
+├── requirements.txt    # Production dependencies
 │
-├── database/
-│   ├── db.py           # Init & koneksi SQLite
-│   └── models.py       # CRUD operations
+├── analysis/           # Quantitative algorithms & technical engines
+│   ├── ihsg.py         # Macro regime & index breadth engine
+│   ├── scalping.py     # High-probability scalp & anchor order engine
+│   ├── forecast.py     # DeMark, ATR & multi-scenario predictive engine
+│   ├── signals.py      # Algorithmic scoring & signal generator
+│   └── technical.py    # Multi-timeframe indicator formulas
 │
-├── data/
-│   ├── fetcher.py      # Ambil data dari Yahoo Finance
-│   ├── fundamental.py  # Scraping fundamental dari IDX
-│   └── scheduler.py    # Auto-fetch background scheduler
+├── data/               # High-throughput data fetching & ingestion
+│   ├── scanner.py      # Market-wide quantitative scanner
+│   ├── running_trade.py# Real-time tape flow simulator
+│   └── fetcher.py      # Historical time-series fetcher
 │
-├── analysis/
-│   ├── technical.py    # RSI, MA, MACD, Bollinger Bands
-│   └── signals.py      # Generate sinyal BUY/SELL
+├── database/           # Persistence layer (local SQLite models & schema)
 │
-├── notifications/
-│   └── notifier.py     # Desktop notification
+├── notifications/      # Alert dispatcher & trigger monitor
 │
-└── pages/
-    ├── 01_Dashboard.py
-    ├── 02_Portfolio.py
-    ├── 03_Research.py
-    ├── 04_Signals.py
-    └── 05_Settings.py
+└── pages/              # Modular workstation pages (01 to 08)
 ```
 
-## ⚠️ Catatan
+---
 
-- Data harga dari **Yahoo Finance** (free, tidak butuh login)
-- Data fundamental dari Yahoo Finance + scraping IDX publik
-- Stockbit tidak punya public API resmi, jadi tidak digunakan secara langsung
-- Semua data tersimpan **lokal** di file `stock.db`
-- Auto-refresh setiap **30 menit** saat market buka (09:00–16:00 WIB, Senin–Jumat)
+## 📜 Disclaimer
 
-## 📊 Indikator Teknikal
-
-| Indikator | Sinyal BUY | Sinyal SELL |
-|---|---|---|
-| RSI(14) | RSI < 30 (oversold) | RSI > 70 (overbought) |
-| MA Crossover | MA20 > MA50 (golden cross) | MA20 < MA50 (death cross) |
-| MACD | MACD > Signal, histogram positif | MACD < Signal, histogram negatif |
-| Bollinger Bands | Harga ≤ Lower Band | Harga ≥ Upper Band |
-
-> **Disclaimer**: Aplikasi ini hanya untuk referensi pribadi. Keputusan investasi sepenuhnya menjadi tanggung jawab pengguna.
+> *This software is designed for quantitative research, financial analytics, and educational purposes only. It does not constitute investment or financial advice.*

@@ -1,4 +1,4 @@
-"""app.py — Entry point utama Saham Monitor"""
+"""app.py — Entry point Deeptick Quantitative Workstation"""
 
 import os
 import sys
@@ -63,20 +63,20 @@ st.title(f"📊 {APP_NAME}")
 st.caption(f"v{APP_VERSION} · Data dari Yahoo Finance · Waktu lokal Indonesia (WIB)")
 
 st.markdown("""
-Selamat datang di **Saham Monitor** — aplikasi pemantau saham IDX pribadimu. 🇮🇩
+Selamat datang di **Deeptick Terminal** — high-performance quantitative market intelligence & algorithmic momentum workstation. ⚡
 
-Navigasi menggunakan menu di **sidebar kiri**:
+Navigasi modul melalui menu di **sidebar kiri**:
 
-| Halaman | Fungsi |
+| Modul | Fungsi & Kapabilitas |
 |---|---|
-| 🏛️ **IHSG Market Pulse** | Barometer makro pasar BEI, traffic light regime, support/resistance indeks |
-| 📊 **Dashboard** | Grafik candlestick, indikator teknikal, ringkasan watchlist |
-| 💼 **Portfolio** | Catat transaksi beli/jual, hitung P&L otomatis |
-| 🔬 **Research** | Analisis mendalam teknikal + fundamental per saham |
-| 🚦 **Signals** | Terminal sinyal, Radar Scalping, & Radar Saham T+1 |
-| 🔎 **Market Scanner** | Screener 80+ emiten BEI: Trending, Scalping, Swing, Histori Validasi |
-| ⚙️ **Settings** | Kelola watchlist, alert rules, konfigurasi broker |
-| ⚡ **Running Trade** | Pantauan arus transaksi jual-beli real-time ala Stockbit |
+| 🏛️ **Market Pulse** | Barometer makro rezim pasar, traffic light regime, support/resistance pivot |
+| 📊 **Dashboard** | Grafik candlestick multi-timeframe, indikator teknikal, ringkasan watchlist |
+| 💼 **Portfolio** | Catat transaksi eksekusi, pelacakan P&L real-time & alokasi risiko |
+| 🔬 **Research** | Analisis mendalam teknikal, proyeksi pergerakan T+1, dan metrik valuasi |
+| 🚦 **Signals** | Terminal sinyal kuantitatif, momentum scalping & proyeksi esok hari |
+| 🔎 **Market Scanner** | Screener likuiditas & momentum: Trending, Scalping Order Zones, Swing |
+| ⚙️ **Settings** | Parameter alert rules, filter ambang batas, dan konfigurasi fee |
+| ⚡ **Running Trade** | Pantauan arus transaksi real-time & order book flow simulation |
 """)
 
 st.divider()
