@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Database & State
+*.db
+*.sqlite
+*.sqlite3
+stock.db
+
+# Environment & Secrets
+.env
+.env.*
+secrets.toml
+.streamlit/secrets.toml
+
+# IDE & OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Logs
+*.log
