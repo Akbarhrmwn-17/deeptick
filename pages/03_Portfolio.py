@@ -164,11 +164,125 @@ st.divider()
 # ════════════════════════════════════════════════════════
 st.subheader("➕ Catat Transaksi (Input Cepat / Import)")
 
-tab_paste, tab_manual, tab_import = st.tabs([
-    "📋 Copy-Paste Cepat (Paling Mudah)",
-    "✍️ Input Form Satu-Satu",
-    "📥 Upload File (CSV / Excel)"
+tab_pdf, tab_paste, tab_manual, tab_import = st.tabs([
+    "📧 Import PDF e-Statement (Stockbit)",
+    "📋 Copy-Paste Cepat",
+    "✍️ Input Form Manual",
+    "📥 Upload CSV / Excel"
 ])
+
+# ─────────────────────────────────────────────────────────
+# TAB 1: PDF e-Statement Stockbit
+# ─────────────────────────────────────────────────────────
+with tab_pdf:
+    st.markdown("""
+    ### 📧 Import Otomatis dari PDF e-Statement Stockbit
+
+    Stockbit mengirimkan **e-Statement bulanan** ke email kamu setiap awal bulan.
+    Tinggal download PDF-nya dari email, lalu upload di sini — semua transaksi masuk otomatis!
+
+    **Langkah-langkah:**
+    1. Buka **email** kamu → cari pengirim **Stockbit** atau subject **"e-Statement"**
+    2. Download file PDF-nya ke komputer
+    3. Upload di kotak di bawah ini → klik **Import**
+
+    > 💡 *Metode ini 100% aman, tidak perlu login Stockbit, tidak ada risiko akun dibatasi.*
+    """)
+
+    st.divider()
+    uploaded_pdf = st.file_uploader(
+        "📂 Pilih file PDF e-Statement Stockbit",
+        type=["pdf"],
+        help="File PDF e-Statement bulanan yang dikirim Stockbit via email"
+    )
+
+    if uploaded_pdf is not None:
+        from data.pdf_parser import parse_stockbit_pdf
+        from database.models import add_to_watchlist
+
+        pdf_bytes = uploaded_pdf.read()
+        file_size_kb = len(pdf_bytes) / 1024
+
+        st.info(f"📄 File: **{uploaded_pdf.name}** ({file_size_kb:.1f} KB) — Sedang diproses...")
+
+        with st.spinner("🔍 Membaca & menganalisis isi PDF..."):
+            transactions, errors, meta = parse_stockbit_pdf(pdf_bytes)
+
+        # Tampilkan metadata PDF
+        col_m1, col_m2, col_m3 = st.columns(3)
+        with col_m1:
+            st.metric("📄 Halaman PDF", meta.get("pages", "?"))
+        with col_m2:
+            st.metric("✅ Transaksi Ditemukan", len(transactions))
+        with col_m3:
+            st.metric("⚠️ Peringatan", len(errors))
+
+        if meta.get("client_name"):
+            st.caption(f"👤 Nasabah: **{meta['client_name']}**")
+        if meta.get("period"):
+            st.caption(f"📅 Periode: **{meta['period']}**")
+
+        if errors:
+            with st.expander(f"⚠️ {len(errors)} peringatan (klik untuk lihat detail)", expanded=False):
+                for err in errors:
+                    st.warning(err)
+
+        if not transactions:
+            st.error("""
+            ❌ Tidak ada transaksi saham yang berhasil terbaca dari PDF ini.
+
+            **Kemungkinan penyebab:**
+            - PDF ini bukan e-Statement transaksi saham (mungkin laporan pajak / ringkasan aset)
+            - Format PDF sudah diubah dari versi lama Stockbit
+            - PDF berisi scan gambar bukan teks (tidak bisa dibaca otomatis)
+
+            **Solusi:**
+            - Coba tab **"Copy-Paste Cepat"** — salin tabel transaksi dari web Stockbit
+            - Atau gunakan tab **"Input Form Manual"** untuk input satu per satu
+            """)
+        else:
+            st.success(f"🎉 Berhasil membaca **{len(transactions)} transaksi** dari PDF!")
+
+            # Preview tabel transaksi
+            df_pdf = pd.DataFrame(transactions)[["date", "ticker", "type", "lot", "price", "fee", "notes"]]
+            df_pdf.columns = ["Tanggal", "Saham", "Tipe", "Lot", "Harga (Rp)", "Fee Est. (Rp)", "Sumber"]
+            df_pdf["Harga (Rp)"] = df_pdf["Harga (Rp)"].apply(lambda x: f"Rp {x:,.0f}")
+            df_pdf["Fee Est. (Rp)"] = df_pdf["Fee Est. (Rp)"].apply(lambda x: f"Rp {x:,.0f}")
+
+            st.dataframe(df_pdf, use_container_width=True, hide_index=True)
+
+            st.warning("""
+            ⚠️ **Verifikasi sebelum menyimpan:**
+            - Pastikan kolom **Lot** dan **Harga** sesuai dengan transaksi aslimu di Stockbit
+            - e-Statement SOA menampilkan total nominal (bukan rincian lot/harga), sehingga nilai perlu dikonfirmasi
+            """)
+
+            col_save, col_cancel = st.columns([2, 1])
+            with col_save:
+                if st.button("🚀 Konfirmasi & Simpan Semua ke Portofolio", type="primary", use_container_width=True):
+                    saved_count = 0
+                    for row in transactions:
+                        try:
+                            add_transaction(
+                                ticker=row["ticker"],
+                                tx_type=row["type"],
+                                date=row["date"],
+                                lot=row["lot"],
+                                price=row["price"],
+                                fee=row.get("fee", 0.0),
+                                tax=row.get("tax", 0.0),
+                                notes=row.get("notes", "Import PDF e-Statement")
+                            )
+                            add_to_watchlist(row["ticker"], row["ticker"])
+                            saved_count += 1
+                        except Exception as e:
+                            st.error(f"Gagal simpan {row['ticker']}: {str(e)}")
+                    if saved_count > 0:
+                        st.success(f"✅ {saved_count} transaksi berhasil disimpan ke Portofolio!")
+                        st.balloons()
+                        st.rerun()
+            with col_cancel:
+                st.info("💡 PDF asli dapat dihapus setelah import selesai — data sudah tersimpan di database lokal.")
 
 with tab_paste:
     st.markdown("""
