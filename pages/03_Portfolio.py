@@ -200,11 +200,7 @@ with tab_paste:
         
         parsed_items, parse_errs = parse_pasted_text(pasted_text)
         
-        if parse_errs and not parsed_items:
-            st.error("Gagal mendeteksi saham dari teks yang ditempel:")
-            for e in parse_errs:
-                st.write(f"- {e}")
-        elif parsed_items:
+        if parsed_items:
             st.success(f"🎉 Terdeteksi **{len(parsed_items)} saham** dari data yang kamu tempel!")
             
             # Format preview
@@ -249,6 +245,13 @@ with tab_paste:
                     st.rerun()
             with col_clear_p:
                 st.caption("Data akan otomatis masuk ke perhitungan P&L dan grafik portofolio.")
+        else:
+            st.warning("""
+            ⚠️ **Belum ada saham yang terdeteksi.**
+            
+            Di dalam kotak teks saat ini baru ada **judul/header tabel saja** (`Symbol, Balance Lot, Invested...`).
+            Pastikan kamu menyalin (copy) **baris nama sahamnya juga** (seperti `BTEK`, `GOTO`, `MEJA`, `PJHB`, `TAYS`) dari layar Stockbit.
+            """)
 
 
 # ─────────────────────────────────────────────────────────
