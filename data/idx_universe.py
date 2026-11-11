@@ -88,6 +88,7 @@ IDX_UNIVERSE = [
     {"ticker": "PWON", "name": "Pakuwon Jati Tbk", "sector": "Properti", "tags": ["SWING"]},
     {"ticker": "CTRA", "name": "Ciputra Development Tbk", "sector": "Properti", "tags": ["SWING"]},
     {"ticker": "SMRA", "name": "Summarecon Agung Tbk", "sector": "Properti", "tags": ["SWING"]},
+    {"ticker": "KOTA", "name": "DMS Propertindo Tbk", "sector": "Properti", "tags": ["MOMENTUM", "SCALP_FRIENDLY"]},
     {"ticker": "PTPP", "name": "PP (Persero) Tbk", "sector": "Konstruksi", "tags": ["SCALP_FRIENDLY"]},
     {"ticker": "WIKA", "name": "Wijaya Karya Tbk", "sector": "Konstruksi", "tags": ["SCALP_FRIENDLY"]},
     {"ticker": "ADHI", "name": "Adhi Karya Tbk", "sector": "Konstruksi", "tags": ["SCALP_FRIENDLY"]},
