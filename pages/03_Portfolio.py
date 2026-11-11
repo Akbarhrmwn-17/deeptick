@@ -397,60 +397,60 @@ with tab_manual:
     watchlist = get_watchlist()
     ticker_options = [s["ticker"] for s in watchlist]
 
+    with st.form("form_transaksi", clear_on_submit=True):
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            tx_ticker = st.selectbox("Saham", ticker_options)
+            tx_type = st.radio("Tipe", ["BUY", "SELL"], horizontal=True)
+        with col2:
+            tx_date = st.date_input("Tanggal", value=date.today())
+            tx_lot = st.number_input("Jumlah Lot", min_value=1, value=1, step=1)
+        with col3:
+            tx_price = st.number_input("Harga per Lembar (Rp)", min_value=1, value=1000, step=10)
+            tx_notes = st.text_input("Catatan (opsional)")
 
-with st.form("form_transaksi", clear_on_submit=True):
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        tx_ticker = st.selectbox("Saham", ticker_options)
-        tx_type = st.radio("Tipe", ["BUY", "SELL"], horizontal=True)
-    with col2:
-        tx_date = st.date_input("Tanggal", value=date.today())
-        tx_lot = st.number_input("Jumlah Lot", min_value=1, value=1, step=1)
-    with col3:
-        tx_price = st.number_input("Harga per Lembar (Rp)", min_value=1, value=1000, step=10)
-        tx_notes = st.text_input("Catatan (opsional)")
+        # Kalkulasi preview
+        total_val = tx_lot * LOT_SIZE * tx_price
+        fee_pct = DEFAULT_BUY_FEE_PCT if tx_type == "BUY" else DEFAULT_SELL_FEE_PCT
+        fee = round(total_val * fee_pct, 0)
+        tax = round(total_val * SELL_TAX_PCT, 0) if tx_type == "SELL" else 0
+        total_net = total_val + fee + tax
 
-    # Kalkulasi preview
-    total_val = tx_lot * LOT_SIZE * tx_price
-    fee_pct = DEFAULT_BUY_FEE_PCT if tx_type == "BUY" else DEFAULT_SELL_FEE_PCT
-    fee = round(total_val * fee_pct, 0)
-    tax = round(total_val * SELL_TAX_PCT, 0) if tx_type == "SELL" else 0
-    total_net = total_val + fee + tax
+        st.markdown(f"""
+        **Preview:**
+        - Nilai transaksi: `Rp {total_val:,.0f}`  ({tx_lot} lot × {LOT_SIZE} lembar × Rp {tx_price:,.0f})
+        - Fee broker ({fee_pct*100:.2f}%): `Rp {fee:,.0f}`
+        - Pajak jual (0.1%): `Rp {tax:,.0f}`
+        - **Total bersih: `Rp {total_net:,.0f}`**
+        """)
 
-    st.markdown(f"""
-    **Preview:**
-    - Nilai transaksi: `Rp {total_val:,.0f}`  ({tx_lot} lot × {LOT_SIZE} lembar × Rp {tx_price:,.0f})
-    - Fee broker ({fee_pct*100:.2f}%): `Rp {fee:,.0f}`
-    - Pajak jual (0.1%): `Rp {tax:,.0f}`
-    - **Total bersih: `Rp {total_net:,.0f}`**
-    """)
+        submitted = st.form_submit_button(
+            f"✅ Simpan Transaksi {tx_type}",
+            use_container_width=True,
+            type="primary",
+        )
 
-    submitted = st.form_submit_button(
-        f"✅ Simpan Transaksi {tx_type}",
-        use_container_width=True,
-        type="primary",
-    )
+        if submitted:
+            if not tx_ticker:
+                st.error("Pilih saham terlebih dahulu.")
+            else:
+                add_transaction(
+                    ticker=tx_ticker,
+                    tx_type=tx_type,
+                    date=str(tx_date),
+                    lot=tx_lot,
+                    price=tx_price,
+                    fee=fee,
+                    tax=tax,
+                    notes=tx_notes,
+                )
+                try:
+                    fetch_price_history(tx_ticker, period="5d", save_to_db=True)
+                except Exception:
+                    pass
+                st.success(f"✅ Transaksi {tx_type} {tx_lot} lot {tx_ticker} @ Rp {tx_price:,.0f} berhasil disimpan!")
+                st.rerun()
 
-    if submitted:
-        if not tx_ticker:
-            st.error("Pilih saham terlebih dahulu.")
-        else:
-            add_transaction(
-                ticker=tx_ticker,
-                tx_type=tx_type,
-                date=str(tx_date),
-                lot=tx_lot,
-                price=tx_price,
-                fee=fee,
-                tax=tax,
-                notes=tx_notes,
-            )
-            try:
-                fetch_price_history(tx_ticker, period="5d", save_to_db=True)
-            except Exception:
-                pass
-            st.success(f"✅ Transaksi {tx_type} {tx_lot} lot {tx_ticker} @ Rp {tx_price:,.0f} berhasil disimpan!")
-            st.rerun()
 
 
 st.divider()

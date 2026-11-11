@@ -271,16 +271,102 @@ def _is_stockbit_portfolio_table(raw_text: str) -> bool:
     return False
 
 
+def parse_multiline_stockbit(text: str) -> Tuple[List[Dict], List[str]]:
+    """
+    Parser khusus untuk tabel porto Stockbit hasil copy dari browser di mana
+    setiap sel menjadi baris tersendiri dan dipisahkan 'more icon' atau baris kosong.
+    """
+    blocks = re.split(r'more\s*icon', text, flags=re.I)
+    results = []
+    errors = []
+    today = datetime.now().strftime("%Y-%m-%d")
+    HEADER_KEYWORDS = {"symbol", "balance", "lot", "available", "average", "price", 
+                       "current", "invested", "market", "value", "potential", "percentage", "action"}
+
+    for block in blocks:
+        lines = [l.strip() for l in block.split("\n") if l.strip()]
+        if not lines:
+            continue
+        ticker = None
+        remaining_tokens = []
+        for line in lines:
+            tokens_in_line = re.split(r'\t|\s{2,}', line)
+            for tok in tokens_in_line:
+                tok = tok.strip()
+                if not tok or tok.lower() in HEADER_KEYWORDS:
+                    continue
+                if not ticker:
+                    m = re.match(r'^[A-Za-z]{4}$', tok)
+                    if m and tok.upper() not in {"MORE", "ICON", "SELL", "BUY", "LOTS", "AKSI"}:
+                        ticker = tok.upper()
+                        continue
+                elif tok.upper() == ticker:
+                    continue
+                else:
+                    remaining_tokens.append(tok)
+
+        if not ticker:
+            continue
+
+        nums = []
+        for tok in remaining_tokens:
+            clean = tok.replace(",", "").replace("%", "").replace("+", "").strip()
+            try:
+                nums.append(float(clean))
+            except ValueError:
+                for s in re.findall(r'[-+]?\d*\.?\d+', clean):
+                    try:
+                        nums.append(float(s))
+                    except:
+                        pass
+
+        if len(nums) >= 3:
+            bal_lot = nums[0]
+            # nums[1] is available_lot
+            avg_p = nums[2]
+            if bal_lot <= 0 or avg_p <= 0:
+                continue
+
+            lot_val = 1 if bal_lot < 1 else int(bal_lot)
+            note = f"Porto asli: {bal_lot} lot ({round(bal_lot*100)} lembar)" if bal_lot < 1 else "Porto Stockbit"
+            results.append({
+                "ticker": ticker,
+                "type": "BUY",
+                "date": today,
+                "lot": lot_val,
+                "price": avg_p,
+                "fee": 0.0,
+                "tax": 0.0,
+                "notes": note,
+            })
+
+    return results, errors
+
+
 def parse_pasted_text(raw_text: str) -> Tuple[List[Dict], List[str]]:
     """
     Parser universal untuk teks hasil copy-paste.
     Auto-deteksi format:
-    1. Tabel Portfolio Stockbit (Ctrl+C dari browser) → parse_stockbit_portfolio_table
-    2. Format bebas: "BBCA 10 lot 5900", "BELI MIKA 5 lot 1700", dll.
+    1. Multi-line Stockbit format (dengan 'more icon' atau baris vertikal)
+    2. Tabel horizontal Stockbit (tab-separated)
+    3. Format bebas: "BBCA 10 lot 5900", "BELI MIKA 5 lot 1700", dll.
     """
-    # Auto-deteksi: kalau mirip tabel Stockbit, pakai parser khusus
+    # 1. Cek format multi-line Stockbit (paling umum saat copy tabel web Stockbit)
+    if "more icon" in raw_text.lower() or "more\nicon" in raw_text.lower():
+        items, errs = parse_multiline_stockbit(raw_text)
+        if items:
+            return items, errs
+
+    # 2. Cek format horizontal tab-separated Stockbit
     if _is_stockbit_portfolio_table(raw_text):
         return parse_stockbit_portfolio_table(raw_text)
+
+    # 3. Fallback: jika multi-line parser bisa mendeteksi sesuatu
+    items_multi, errs_multi = parse_multiline_stockbit(raw_text)
+    if items_multi:
+        return items_multi, errs_multi
+
+    # 4. Format teks bebas baris per baris ("BBCA 10 lot 5900", dsb.)
 
     # ── Parser format bebas (original) ───────────────────
     parsed = []
