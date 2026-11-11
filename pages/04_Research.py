@@ -446,6 +446,18 @@ with tab_fund:
 
         st.caption(f"Data diambil: {fund.get('fetched_at', 'N/A')}")
 
+        # Profil Dividen & Aksi Korporasi
+        from data.fundamental import fetch_dividend_info
+        div_spec = fetch_dividend_info(selected)
+        if div_spec.get("dividend_yield", 0) > 0 or div_spec.get("ex_dividend_date") != "-":
+            st.divider()
+            st.subheader("💰 Profil Dividen & Aksi Korporasi")
+            cd1, cd2, cd3, cd4 = st.columns(4)
+            cd1.metric("Dividend Yield", f"{div_spec['dividend_yield']}%")
+            cd2.metric("Dividen Terakhir", f"Rp {div_spec['last_dividend']:,.1f} / lbr")
+            cd3.metric("Tanggal Ex-Dividend", div_spec['ex_dividend_date'])
+            cd4.metric("Payout Ratio", f"{div_spec['payout_ratio']}%")
+
 
 # ════════════════════════════════════════════════════════
 # TAB SINYAL

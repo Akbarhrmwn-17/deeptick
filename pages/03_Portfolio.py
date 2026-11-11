@@ -99,9 +99,31 @@ with col4:
 
 st.divider()
 
+# ── Alert Aksi Korporasi & Dividen Portofolio ─────────────
+if rows_hold:
+    from data.fundamental import fetch_dividend_info
+    div_alerts = []
+    for h in rows_hold:
+        t_sym = h["Ticker"]
+        try:
+            d_info = fetch_dividend_info(t_sym)
+            if d_info.get("dividend_yield", 0) > 0 and d_info.get("ex_dividend_date") != "-":
+                div_alerts.append(d_info)
+        except Exception:
+            pass
+
+    if div_alerts:
+        with st.expander(f"📢 Info Dividen Saham Portofolio ({len(div_alerts)} Emiten)", expanded=False):
+            st.caption("Pantau tanggal Ex-Date dividen untuk mengamankan hak dividen atau menghindari *Dividend Trap*.")
+            c_div_cols = st.columns(min(len(div_alerts), 3))
+            for i, da in enumerate(div_alerts[:3]):
+                with c_div_cols[i % 3]:
+                    st.info(f"💰 **{da['ticker']}** — Yield: **{da['dividend_yield']}%**\n\nDividen: Rp {da['last_dividend']:,.1f}/lbr | Ex-Date: `{da['ex_dividend_date']}`")
+
 
 # ════════════════════════════════════════════════════════
 # HOLDINGS TABLE
+
 # ════════════════════════════════════════════════════════
 if rows_hold:
     st.subheader("📋 Posisi Saat Ini (Holdings)")

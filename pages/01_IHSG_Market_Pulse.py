@@ -130,14 +130,16 @@ st.markdown("<hr style='margin:15px 0;'>", unsafe_allow_html=True)
 
 
 # ── TABS LAYOUT ───────────────────────────────────────────────
-tab_today, tab_tomorrow, tab_chart, tab_structure, tab_breadth, tab_guidance = st.tabs([
+tab_today, tab_tomorrow, tab_chart, tab_structure, tab_breadth, tab_guidance, tab_calendar = st.tabs([
     "🎯 1. Prediksi & Tracking Hari Ini",
     "🔮 2. Proyeksi IHSG Besok (T+1)",
     "📈 3. Grafik Teknikal IHSG",
     "🧱 4. Struktur Level Kunci & Moving Average",
     "🌊 5. Market Breadth (Saham Naik vs Turun)",
     "🧭 6. Panduan Taktis Eksekusi",
+    "📅 7. Kalender Aksi Korporasi & Dividen",
 ])
+
 
 
 # ══════════════════════════════════════════════════════════════
@@ -531,3 +533,43 @@ with tab_guidance:
     3. **Manajemen Emosi & Psikologi:**
        - Di pasar modal, **CASH ADALAH POSISI**. Tidak harus trading setiap hari jika kondisi indeks makro sedang berisiko tinggi.
     """)
+
+
+# ══════════════════════════════════════════════════════════════
+# TAB 7: KALENDER AKSI KORPORASI & DIVIDEN
+# ══════════════════════════════════════════════════════════════
+with tab_calendar:
+    st.subheader("📅 Kalender Aksi Korporasi & Dividen Saham BEI")
+    st.caption("Jadwal dividen tunai emiten terkemuka, Dividend Yield, serta tanggal krusial Cum-Date & Ex-Date untuk menangkap momentum kenaikan dan menghindari jebakan dividen.")
+
+    from data.fundamental import get_dividend_calendar
+    with st.spinner("Mengambil data kalender dividen terkini..."):
+        div_data = get_dividend_calendar()
+
+    if div_data:
+        highest_div = div_data[0]
+        c_d1, c_d2, c_d3 = st.columns(3)
+        c_d1.metric("🏆 Dividend Yield Tertinggi", f"{highest_div['ticker']} ({highest_div['dividend_yield']}%)", highest_div['name'])
+        c_d2.metric("💰 Estimasi Dividen Terakhir", f"Rp {highest_div['last_dividend']:,.1f} / lbr", f"Ex-Date: {highest_div['ex_dividend_date']}")
+        c_d3.metric("📊 Jumlah Emiten Terpantau", f"{len(div_data)} Saham", delta="LQ45 & Blue Chips")
+
+        st.markdown("---")
+
+        df_div = pd.DataFrame(div_data)[["ticker", "name", "sector", "dividend_yield", "last_dividend", "ex_dividend_date"]]
+        df_div.columns = ["Kode Saham", "Nama Perusahaan", "Sektor", "Dividend Yield (%)", "Dividen Terakhir (Rp/lbr)", "Ex-Dividend Date"]
+        df_div["Dividend Yield (%)"] = df_div["Dividend Yield (%)"].apply(lambda x: f"{x:.2f}%")
+        df_div["Dividen Terakhir (Rp/lbr)"] = df_div["Dividen Terakhir (Rp/lbr)"].apply(lambda x: f"Rp {x:,.1f}")
+
+        st.dataframe(df_div, use_container_width=True, hide_index=True)
+
+        st.markdown("""
+        ### 💡 Panduan Taktis Dividen & Aksi Korporasi:
+        1. **🚀 Strategi Dividend Run-Up Play (Cuan Momentum):**
+           - Emiten berdividen besar (Yield > 6%) biasanya mulai mengalami akumulasi kenaikan **2-3 minggu sebelum Cum-Date**.
+           - Beli di harga bawah saat fase konsolidasi, lalu **jual di H-1 sebelum Cum-Date** untuk mengamankan *capital gain* murni!
+        2. **⚠️ Waspada Dividend Trap (Jebakan Dividen):**
+           - Jangan beli saham di hari Cum-Date hanya demi dividen, karena pada hari **Ex-Date** harga saham hampir selalu anjlok sedalam persentase yield dividen tersebut.
+        """)
+    else:
+        st.info("Data kalender dividen sedang diperbarui dari bursa.")
+

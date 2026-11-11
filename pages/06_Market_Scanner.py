@@ -35,9 +35,11 @@ except Exception:
 from data.idx_universe import IDX_UNIVERSE, get_all_universe_tickers, get_universe_by_category
 from data.scanner import fetch_universe_ohlcv_batch, run_full_market_scan, run_historical_validation
 from analysis.ihsg import analyze_ihsg_regime
+from analysis.calculator import calculate_trade_position
 from database.models import get_watchlist, add_to_watchlist
 
 st.set_page_config(page_title="Market Scanner — Saham BEI", page_icon="🔎", layout="wide")
+
 
 st.markdown("""
 <style>
@@ -162,7 +164,53 @@ def filter_items(items: list) -> list:
     return filtered
 
 
+def render_position_sizing_calculator(ticker: str, entry: float, tp: float, sl: float, key_prefix: str):
+    """
+    Kalkulator Lot & Money Management Interaktif Anti-Boncos.
+    Menghitung ukuran lot optimal berdasarkan batasan risiko modal (Fixed Fractional).
+    """
+    with st.expander(f"🧮 Hitung Lot & Alokasi Modal Anti-Boncos ({ticker})", expanded=False):
+        c_calc1, c_calc2 = st.columns([1, 1])
+        with c_calc1:
+            user_cap = st.number_input(
+                "Total Modal Trading (Rp):",
+                min_value=100000,
+                value=int(st.session_state.get("trader_capital", 10000000)),
+                step=500000,
+                key=f"cap_{key_prefix}_{ticker}"
+            )
+            st.session_state["trader_capital"] = user_cap
+        with c_calc2:
+            user_risk = st.slider(
+                "Maksimal Toleransi Rugi (% dari modal):",
+                min_value=0.5,
+                max_value=5.0,
+                value=float(st.session_state.get("trader_risk", 1.5)),
+                step=0.5,
+                key=f"risk_{key_prefix}_{ticker}",
+                help="Standar hedge fund: Batasi risiko 1% - 2% modal per transaksi!"
+            )
+            st.session_state["trader_risk"] = user_risk
+
+        pos_data = calculate_trade_position(
+            capital=user_cap,
+            risk_pct=user_risk,
+            entry_price=entry,
+            stop_loss=sl,
+            target_profit=tp,
+        )
+        if pos_data:
+            q1, q2, q3, q4 = st.columns(4)
+            q1.metric("🎯 Rekomendasi Beli", f"{pos_data['recommended_lot']:,} LOT", f"Modal: Rp {pos_data['net_buy_cost']:,.0f}")
+            q2.metric("🚀 Potensi Cuan (TP)", f"+Rp {pos_data['net_profit_idr']:,.0f}", f"+{pos_data['net_profit_pct']:.2f}%")
+            q3.metric("🛑 Batas Risiko (SL)", f"-Rp {pos_data['net_loss_idr']:,.0f}", f"-{pos_data['net_loss_pct']:.2f}%", delta_color="inverse")
+            q4.metric("⚖️ R:R Bersih & BEP", f"1 : {pos_data['net_rr_ratio']:.2f}", f"BEP: Rp {pos_data['bep_tick']}")
+            if pos_data.get("is_capital_capped"):
+                st.caption("ℹ️ *Ukuran lot dibatasi oleh 100% daya beli modal kas agar tidak melebihi modal.*")
+
+
 # ── IHSG MACRO REGIME BANNER ──────────────────────────────────
+
 @st.cache_data(ttl=300, show_spinner=False)
 def get_ihsg_banner_info():
     try:
@@ -197,27 +245,31 @@ if ihsg_reg and ihsg_reg.get("status") != "UNKNOWN":
 # ── TOP SUMMARY METRICS ────────────────────────────────────────
 trending_data = filter_items(scan_results.get("trending", []))
 scalp_data = filter_items(scan_results.get("scalping", []))
+smart_data = filter_items(scan_results.get("smart_money", []))
 swing_data = filter_items(scan_results.get("swing", []))
 forecast_data = filter_items(scan_results.get("forecast", []))
 hist_records = filter_items(validation_results.get("records", []))
 
-c1, c2, c3, c4 = st.columns(4)
-c1.metric("📜 Validasi Kemarin", f"{validation_results.get('win_rate', 0)}% Win", delta=f"{validation_results.get('win_count', 0)} Cuan / {validation_results.get('loss_count', 0)} Rugi")
-c2.metric("⚡ Scalping Hari Ini", f"{len(scalp_data)} Emiten", delta="Fast In-Out")
-c3.metric("🔥 Trending & Volume", f"{len(trending_data)} Emiten", delta="Surge")
-c4.metric("🔮 Proyeksi Besok (T+1)", f"{len(forecast_data)} Emiten", delta="P > 52%")
+c1, c2, c3, c4, c5 = st.columns(5)
+c1.metric("📜 Validasi Kemarin", f"{validation_results.get('win_rate', 0)}% Win", delta=f"{validation_results.get('win_count', 0)} Cuan")
+c2.metric("⚡ Top Scalping", f"{len(scalp_data)} Emiten", delta="Fast In-Out")
+c3.metric("🌊 Smart Money", f"{len(smart_data)} Emiten", delta="Akumulasi")
+c4.metric("🔥 Trending & Vol", f"{len(trending_data)} Emiten", delta="Surge")
+c5.metric("🔮 Proyeksi Besok", f"{len(forecast_data)} Emiten", delta="P > 52%")
 
 st.markdown("<hr style='margin:10px 0;'>", unsafe_allow_html=True)
 
 
 # ── TABS INTERFACE (DIPISAH SESUAI TIMELINE AGAR JELAS) ────────
-tab_history, tab_scalping, tab_trending, tab_swing, tab_forecast = st.tabs([
+tab_history, tab_scalping, tab_smart_money, tab_trending, tab_swing, tab_forecast = st.tabs([
     "📜 1. Histori & Validasi Kemarin",
     "⚡ 2. Top Scalping Hari Ini",
-    "🔥 3. Saham Trending Hari Ini",
-    "🌊 4. Top Swing Trading",
-    "🔮 5. Proyeksi Esok Hari (T+1)",
+    "🌊 3. Top Akumulasi Smart Money",
+    "🔥 4. Saham Trending Hari Ini",
+    "📈 5. Top Swing Trading",
+    "🔮 6. Proyeksi Esok Hari (T+1)",
 ])
+
 
 
 # ══════════════════════════════════════════════════════════════
@@ -381,10 +433,73 @@ with tab_scalping:
                             st.success(f"{t} ditambahkan!")
                             st.rerun()
 
+                # ── Kalkulator Lot & Money Management Interaktif ──
+                render_position_sizing_calculator(t, p_entry, p_tp, p_sl, f"sc_{idx}")
+
 
 # ══════════════════════════════════════════════════════════════
-# TAB 3: TRENDING & VOLUME SURGE
+# TAB 3: TOP AKUMULASI SMART MONEY
 # ══════════════════════════════════════════════════════════════
+with tab_smart_money:
+    st.subheader("🌊 Saham Akumulasi Smart Money & Arus Dana Institusi")
+    st.caption("Mendeteksi emiten yang sedang diakumulasi diam-diam oleh institusi/bandar berdasarkan Chaikin Money Flow (CMF > 0.05), lonjakan volume tersembunyi, dan Bullish Divergence (harga di bawah tapi akumulasi naik).")
+
+    if not smart_data:
+        st.info("Belum ada emiten yang memenuhi ambang batas akumulasi institusi pada filter saat ini.")
+    else:
+        for idx, row in enumerate(smart_data):
+            t = row["ticker"]
+            with st.container(border=True):
+                col_info, col_acc, col_chart, col_act = st.columns([3, 3, 3, 1.5])
+                
+                with col_info:
+                    st.markdown(f"### **{t}** — {row['name']}")
+                    st.markdown(f"🏷️ `{row['sector']}` | **Harga:** `Rp {row['price']:,.0f}` ({row['change_pct']:+.2f}%)")
+                    st.markdown(f"Status: **{row['tier']}**")
+                    if row.get("is_bull_div"):
+                        st.markdown("<span style='background:#1e3a5f; color:#60a5fa; padding:3px 8px; border-radius:6px; font-weight:700;'>🔥 BULLISH DIVERGENCE</span>", unsafe_allow_html=True)
+                    st.caption(f"💡 *{row.get('div_note', '')}*")
+
+                with col_acc:
+                    st.markdown("**📊 Indikator Aliran Uang Institusi:**")
+                    st.markdown(f"- ⚡ **Probabilitas Akumulasi:** <span style='color:#22c55e; font-weight:800; font-size:1.15rem;'>{row['prob_accum']}%</span>", unsafe_allow_html=True)
+                    st.markdown(f"- 🌊 **Chaikin Money Flow (CMF):** `+{row['cmf_val']:.3f}` *(Positif = Inflow)*")
+                    st.markdown(f"- 📈 **Lonjakan Volume:** `{row['vol_ratio']}x` lipat rata-rata")
+                    st.caption("Titik masuk paling aman saat Smart Money sedang akumulasi di harga bawah.")
+
+                with col_chart:
+                    p_curr = float(row['price'])
+                    p_entry = float(row['entry'])
+                    p_tp = float(row['take_profit'])
+                    p_sl = float(row['stop_loss'])
+                    
+                    fig_order = go.Figure()
+                    fig_order.add_trace(go.Scatter(x=[0, 10], y=[p_entry, p_entry], mode="lines", line=dict(color="#3b82f6", width=2, dash="dash"), name="Entry"))
+                    fig_order.add_trace(go.Scatter(x=[0, 10], y=[p_tp, p_tp], mode="lines", line=dict(color="#22c55e", width=2.5), name="TP"))
+                    fig_order.add_trace(go.Scatter(x=[0, 10], y=[p_sl, p_sl], mode="lines", line=dict(color="#ef4444", width=2.5), name="SL"))
+                    fig_order.add_trace(go.Scatter(x=[5], y=[p_curr], mode="markers+text", marker=dict(size=12, color="#ffffff", line=dict(width=2, color="#eab308")), text=[f"Live: {p_curr:,.0f}"], textposition="middle right"))
+                    fig_order.update_layout(template="plotly_dark", height=165, margin=dict(l=5, r=10, t=10, b=10), showlegend=False, xaxis=dict(showgrid=False, showticklabels=False), yaxis=dict(showgrid=True, tickvals=[p_sl, p_entry, p_tp], ticktext=[f"🛑 SL {p_sl:,.0f}", f"🟢 {p_entry:,.0f}", f"🎯 TP {p_tp:,.0f}"]))
+                    st.plotly_chart(fig_order, use_container_width=True, key=f"sm_chart_{t}_{idx}")
+
+                with col_act:
+                    st.write("")
+                    st.metric("R:R Ratio", row["rr_ratio"])
+                    if t in wl_tickers:
+                        st.button("✅ Watchlist", key=f"wl_sm_{t}_{idx}", disabled=True, use_container_width=True)
+                    else:
+                        if st.button("➕ Watchlist", key=f"wl_sm_{t}_{idx}", use_container_width=True):
+                            add_to_watchlist(t, row["name"], row["sector"])
+                            st.success(f"{t} ditambahkan!")
+                            st.rerun()
+
+                # ── Kalkulator Lot & Money Management Interaktif ──
+                render_position_sizing_calculator(t, p_entry, p_tp, p_sl, f"sm_{idx}")
+
+
+# ══════════════════════════════════════════════════════════════
+# TAB 4: TRENDING & VOLUME SURGE
+# ══════════════════════════════════════════════════════════════
+
 with tab_trending:
     st.subheader("🔥 Saham Paling Trending & Lonjakan Volume Luar Biasa")
     st.caption("Saham yang mengalami akumulasi volume masif (>1.3x rata-rata 20 hari) dan/atau breakout dekat level harga tertinggi 20 hari.")
@@ -465,9 +580,12 @@ with tab_swing:
                             st.success(f"{t} ditambahkan!")
                             st.rerun()
 
+                # ── Kalkulator Lot & Money Management Interaktif ──
+                render_position_sizing_calculator(t, float(row['entry']), float(row['take_profit']), float(row['stop_loss']), f"sw_{idx}")
+
 
 # ══════════════════════════════════════════════════════════════
-# TAB 5: PROYEKSI ESOK HARI (T+1)
+# TAB 6: PROYEKSI ESOK HARI (T+1)
 # ══════════════════════════════════════════════════════════════
 with tab_forecast:
     st.subheader("🔮 Saham dengan Probabilitas Menguat Tertinggi Besok")

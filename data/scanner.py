@@ -111,6 +111,7 @@ def run_full_market_scan(dfs: Dict[str, pd.DataFrame] = None) -> Dict[str, List[
     scalping_list = []
     swing_list = []
     forecast_list = []
+    smart_money_list = []
 
     for ticker, df in dfs.items():
         if df.empty or len(df) < 15:
@@ -358,18 +359,74 @@ def run_full_market_scan(dfs: Dict[str, pd.DataFrame] = None) -> Dict[str, List[
         except Exception:
             pass
 
+        # ── 5. SMART MONEY & AKUMULASI FLOW ────────────────────
+        if len(df) >= 20:
+            try:
+                df_tech = add_indicators(df)
+                last_tech = df_tech.iloc[-1]
+                cmf_val = float(last_tech.get("CMF", 0)) if not pd.isna(last_tech.get("CMF")) else 0.0
+
+                # Bullish Divergence check (15 bar)
+                recent = df_tech.tail(15)
+                price_chg = (recent["close"].iloc[-1] - recent["close"].iloc[0]) / recent["close"].iloc[0]
+                obv_chg = (recent["OBV"].iloc[-1] - recent["OBV"].iloc[0])
+                is_bull_div = price_chg < -0.015 and obv_chg > 0
+
+                # Closing Location Value (CLV)
+                h_f, l_f, c_f = float(last_tech["high"]), float(last_tech["low"]), float(last_tech["close"])
+                day_rng = max(h_f - l_f, 0.001)
+                clv = ((c_f - l_f) - (h_f - c_f)) / day_rng
+
+                vol_ma = float(last_tech.get("Vol_MA20", 1))
+                v_curr = float(last_tech["volume"])
+                v_ratio = v_curr / max(vol_ma, 1)
+
+                acc_score = 50.0 + (cmf_val * 90.0) + (clv * 20.0)
+                if v_ratio >= 1.2 and c_f >= float(last_tech["open"]):
+                    acc_score += 15.0
+                if is_bull_div:
+                    acc_score += 20.0
+                prob_accum = max(10, min(98, round(acc_score, 1)))
+
+                if prob_accum >= 65.0 or cmf_val >= 0.08 or is_bull_div:
+                    tier = "MASIF 🟢🟢" if prob_accum >= 80 else ("MODERAT 🟢" if prob_accum >= 70 else "TERDETEKSI ⚪")
+                    div_note = "🔥 Bullish Divergence (Harga di Bawah, Bandar Akumulasi!)" if is_bull_div else "Akumulasi Bertahap"
+
+                    smart_money_list.append({
+                        "ticker": ticker,
+                        "name": meta["name"],
+                        "sector": meta["sector"],
+                        "price": c,
+                        "change_pct": change_pct,
+                        "prob_accum": prob_accum,
+                        "cmf_val": round(cmf_val, 3),
+                        "vol_ratio": round(v_ratio, 2),
+                        "tier": tier,
+                        "div_note": div_note,
+                        "is_bull_div": is_bull_div,
+                        "entry": round(c, 0),
+                        "take_profit": round(c * 1.05, 0),
+                        "stop_loss": round(c * 0.96, 0),
+                        "rr_ratio": 1.25,
+                    })
+            except Exception:
+                pass
+
     trending_list.sort(key=lambda x: (x["trend_score"], x["vol_ratio"]), reverse=True)
     scalping_list.sort(key=lambda x: (x["score"], x["vol_ratio"]), reverse=True)
     swing_list.sort(key=lambda x: x["swing_score"], reverse=True)
     forecast_list.sort(key=lambda x: x["prob_up"], reverse=True)
+    smart_money_list.sort(key=lambda x: (x["prob_accum"], x["cmf_val"]), reverse=True)
 
     return {
         "trending": trending_list,
         "scalping": scalping_list,
         "swing": swing_list,
         "forecast": forecast_list,
+        "smart_money": smart_money_list,
         "scanned_count": len(dfs),
     }
+
 
 
 def run_historical_validation(dfs: Dict[str, pd.DataFrame] = None) -> Dict[str, Any]:
