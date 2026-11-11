@@ -64,8 +64,14 @@ st.subheader(f"📊 {selected} — {stock_info.get('name', '')} | {stock_info.ge
 
 # ── Load Data ─────────────────────────────────────────────
 df_raw = get_price_df_from_db(selected, limit=500)
+if df_raw.empty or len(df_raw) < 50:
+    try:
+        df_raw = fetch_price_history(selected, period="1y", save_to_db=True)
+    except Exception:
+        pass
 fund = get_fundamental(selected)
 latest_price = get_latest_price(selected)
+
 
 tab_today, tab_forecast, tab_tech, tab_fund, tab_signal, tab_scalp, tab_pattern, tab_sr = st.tabs([
     "🎯 Prediksi Hari Ini",
@@ -260,13 +266,16 @@ with tab_tech:
                 unsafe_allow_html=True,
             )
         with b_col2:
+            cmf_stat = smf.get("cmf_status", "Data Kurang")
+            cmf_num = smf.get("cmf", 0.0)
             st.markdown(
                 f'<div style="background:{smf_col}22;border:1px solid {smf_col};border-radius:8px;'
                 f'padding:10px 16px;margin-bottom:12px;">'
-                f'<b>🌊 Smart Money Flow:</b> <span style="color:{smf_col};font-weight:bold;">{smf["cmf_status"]}</span>'
-                f' (CMF: {smf["cmf"]:+.2f})</div>',
+                f'<b>🌊 Smart Money Flow:</b> <span style="color:{smf_col};font-weight:bold;">{cmf_stat}</span>'
+                f' (CMF: {cmf_num:+.2f})</div>',
                 unsafe_allow_html=True,
             )
+
 
         if smf.get("divergence") != "Tidak ada":
             st.warning(smf["divergence"])

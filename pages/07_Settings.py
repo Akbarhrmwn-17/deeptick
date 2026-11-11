@@ -69,8 +69,10 @@ with tab_watch:
             manual_sector = st.text_input("Sektor (opsional)")
 
         if st.button("➕ Tambah Manual"):
-            if manual_ticker and manual_name:
-                added = add_to_watchlist(manual_ticker, manual_name, manual_sector)
+            if manual_ticker:
+                clean_name = manual_name.strip() if manual_name else manual_ticker
+                clean_sec = manual_sector.strip() if manual_sector else "Umum"
+                added = add_to_watchlist(manual_ticker, clean_name, clean_sec)
                 if added:
                     with st.spinner(f"Mengambil data {manual_ticker}..."):
                         fetch_price_history(manual_ticker, period="1y", save_to_db=True)
@@ -79,7 +81,8 @@ with tab_watch:
                 else:
                     st.warning(f"{manual_ticker} sudah ada di watchlist.")
             else:
-                st.error("Isi kode saham dan nama perusahaan.")
+                st.error("Masukkan kode saham (misal: KOTA, BBCA).")
+
 
     st.divider()
 

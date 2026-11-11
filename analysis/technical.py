@@ -109,7 +109,18 @@ def get_smart_money_flow(df: pd.DataFrame) -> dict:
     Analisis arus dana institusi / Smart Money (Chaikin Money Flow & OBV).
     """
     if df.empty or len(df) < 25:
-        return {"status": "UNKNOWN", "cmf": 0, "obv_trend": "Netral", "detail": "Data tidak cukup"}
+        return {
+            "status": "UNKNOWN",
+            "cmf": 0.0,
+            "cmf_status": "Data Kurang (Minimal 25 Hari)",
+            "cmf_color": "#888888",
+            "cmf_emoji": "⚪",
+            "obv": 0.0,
+            "obv_ema": 0.0,
+            "obv_trend": "Netral",
+            "divergence": "Tidak ada",
+            "detail": "Data harga belum cukup untuk kalkulasi CMF",
+        }
 
     df_ind = add_indicators(df)
     last = df_ind.iloc[-1]
