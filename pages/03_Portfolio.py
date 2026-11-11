@@ -286,49 +286,79 @@ with tab_pdf:
 
 with tab_paste:
     st.markdown("""
-    **Tidak perlu pusing cari tombol download di Stockbit!** Cukup ketik atau copy-paste daftar sahammu di bawah.
+    ### 📋 Copy-Paste Langsung dari Web Stockbit (Paling Praktis! ⭐)
     
-    *Contoh format bebas yang didukung:*
-    ```text
-    BBCA 10 lot 5900
-    MIKA 5 lot 1700
-    GOTO 50 lot 26
-    MEJA 20 lot 146
-    ```
+    Kamu tidak butuh tombol download atau file apapun! Cukup copy tabel dari layar Stockbit:
+    
+    **Langkah-langkah mudah:**
+    1. Buka tab browser **Stockbit** kamu (halaman Portfolio)
+    2. **Blok / sorot** baris tabel portfoliomu (mulai dari nama saham sampai angka persentase)
+    3. Tekan **Ctrl + C** (Copy)
+    4. Klik kotak di bawah lalu tekan **Ctrl + V** (Paste) ➔ Klik **⚡ Analisis Data**
+    
+    *Catatan: Kamu juga bisa ketik manual format singkat seperti `BBCA 10 lot 5900` atau `GOTO 50 25`.*
     """)
     pasted_text = st.text_area(
-        "Ketik / Tempel Data Portofoliomu di sini:",
-        height=140,
-        placeholder="Contoh:\nBBCA 10 lot 5900\nMIKA 5 lot 1700\nGOTO 50 lot 26"
+        "Tempel (Paste) Tabel Portofolio Stockbit di sini:",
+        height=160,
+        placeholder="Tempel tabel hasil copy dari Stockbit di sini...\nContoh:\nBTEK    75    75    16.69    11    125,187    82,500    -42,687    -34.10%\nGOTO    16    16    65.09    25    104,156    40,000    -64,156    -61.60%"
     )
 
-    if st.button("⚡ Proses & Simpan ke Portofolio", type="primary"):
-        if not pasted_text.strip():
-            st.warning("Kotak teks masih kosong.")
-        else:
-            from data.stockbit_importer import parse_pasted_text
-            from database.models import add_to_watchlist
+    if pasted_text.strip():
+        from data.stockbit_importer import parse_pasted_text
+        from database.models import add_to_watchlist
+        
+        parsed_items, parse_errs = parse_pasted_text(pasted_text)
+        
+        if parse_errs and not parsed_items:
+            st.error("Gagal mendeteksi saham dari teks yang ditempel:")
+            for e in parse_errs:
+                st.write(f"- {e}")
+        elif parsed_items:
+            st.success(f"🎉 Terdeteksi **{len(parsed_items)} saham** dari data yang kamu tempel!")
             
-            parsed_items, errors = parse_pasted_text(pasted_text)
-            if not parsed_items:
-                st.error("Tidak ada saham yang berhasil terdeteksi. Pastikan ada nama saham (misal BBCA), jumlah lot, dan harga.")
-            else:
-                saved = 0
-                for item in parsed_items:
-                    add_transaction(
-                        ticker=item["ticker"],
-                        tx_type=item["type"],
-                        date=item["date"],
-                        lot=item["lot"],
-                        price=item["price"],
-                        fee=item["fee"],
-                        tax=item["tax"],
-                        notes="Input Cepat"
-                    )
-                    add_to_watchlist(item["ticker"], item["ticker"])
-                    saved += 1
-                st.success(f"🎉 Sukses! {saved} saham berhasil dimasukkan ke Portofolio & Watchlist!")
-                st.rerun()
+            # Format preview
+            preview_rows = []
+            for item in parsed_items:
+                modal = item["lot"] * 100 * item["price"]
+                preview_rows.append({
+                    "Saham": item["ticker"],
+                    "Tipe": item["type"],
+                    "Jumlah (Lot)": f"{item['lot']:,}",
+                    "Harga Rata-Rata": f"Rp {item['price']:,.2f}",
+                    "Estimasi Modal": f"Rp {modal:,.0f}",
+                    "Catatan": item.get("notes", "Input Cepat")
+                })
+            
+            st.dataframe(pd.DataFrame(preview_rows), use_container_width=True, hide_index=True)
+            
+            if parse_errs:
+                with st.expander(f"⚠️ {len(parse_errs)} catatan kecil"):
+                    for e in parse_errs:
+                        st.caption(e)
+            
+            col_save_p, col_clear_p = st.columns([2, 1])
+            with col_save_p:
+                if st.button("🚀 Konfirmasi & Simpan ke Portofolio", type="primary", use_container_width=True):
+                    saved = 0
+                    for item in parsed_items:
+                        add_transaction(
+                            ticker=item["ticker"],
+                            tx_type=item["type"],
+                            date=item["date"],
+                            lot=item["lot"],
+                            price=item["price"],
+                            fee=item.get("fee", 0.0),
+                            tax=item.get("tax", 0.0),
+                            notes=item.get("notes", "Input Cepat")
+                        )
+                        add_to_watchlist(item["ticker"], item["ticker"])
+                        saved += 1
+                    st.success(f"🎉 Sukses! {saved} saham berhasil dimasukkan ke Portofolio & Watchlist!")
+                    st.balloons()
+                    st.rerun()
+            with col_clear_p:
+                st.caption("Data akan otomatis masuk ke perhitungan P&L dan grafik portofolio.")
 
 
 with tab_import:

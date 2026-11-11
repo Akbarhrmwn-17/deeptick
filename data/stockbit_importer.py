@@ -143,44 +143,173 @@ def parse_stockbit_file(file_content, filename: str) -> Tuple[List[Dict], List[s
     return parsed_rows, errors
 
 
+def parse_stockbit_portfolio_table(raw_text: str) -> Tuple[List[Dict], List[str]]:
+    """
+    Parser khusus untuk tabel porto Stockbit hasil Ctrl+C dari browser.
+
+    Format kolom Stockbit Portfolio:
+    Symbol | Balance Lot | Available Lot | Average Price | Current Price |
+    Invested | Market Value | Potential P/L | Percentage | Action
+    """
+    parsed = []
+    errors = []
+    today = datetime.now().strftime("%Y-%m-%d")
+
+    lines = [l.strip() for l in raw_text.strip().split("\n") if l.strip()]
+
+    # Mapping kolom default
+    col_sym = 0
+    col_lot = 1
+    col_avg = 3
+
+    # Cek apakah ada baris header untuk deteksi kolom yang dinamis
+    for line in lines[:3]:
+        parts = re.split(r'\t|  +', line.strip())
+        parts_low = [p.lower() for p in parts]
+        if any("symbol" in p or "saham" in p or "emiten" in p for p in parts_low):
+            for i, p in enumerate(parts_low):
+                if any(k in p for k in ["symbol", "saham", "emiten"]):
+                    col_sym = i
+                elif any(k in p for k in ["balance", "bal lot", "lot", "qty"]):
+                    col_lot = i
+                elif any(k in p for k in ["average", "avg", "rata"]):
+                    col_avg = i
+            break
+
+    HEADER_KEYWORDS = {"symbol", "balance", "lot", "average", "price", "invested",
+                       "market", "potential", "percentage", "action", "saham",
+                       "current", "available"}
+
+    for line in lines:
+        try:
+            parts = re.split(r'\t|  +', line.strip())
+            parts = [p.strip() for p in parts if p.strip()]
+
+            if len(parts) < 3:
+                continue
+
+            # Skip baris header
+            if any(p.lower() in HEADER_KEYWORDS for p in parts[:3]):
+                continue
+
+            # Kolom Symbol/Ticker
+            sym_idx = col_sym if col_sym < len(parts) else 0
+            ticker_raw = re.sub(r'[^A-Za-z]', '', parts[sym_idx]).upper()
+            if len(ticker_raw) < 2 or len(ticker_raw) > 6:
+                continue
+
+            # Kolom Balance Lot
+            lot_idx = col_lot if col_lot < len(parts) else 1
+            lot_raw = clean_currency(parts[lot_idx])
+            if lot_raw <= 0:
+                continue
+
+            if lot_raw < 1:
+                lot_val = 1
+                lot_note = f"Porto asli: {lot_raw} lot ({round(lot_raw*100)} lembar)"
+            else:
+                lot_val = int(lot_raw)
+                lot_note = ""
+
+            # Kolom Average Price
+            avg_idx = col_avg if col_avg < len(parts) else (3 if len(parts) >= 4 else 2)
+            avg_price = clean_currency(parts[avg_idx])
+
+            if avg_price <= 0:
+                # Coba fallback kolom lain
+                for alt_idx in [3, 2, 4]:
+                    if alt_idx < len(parts) and alt_idx != lot_idx:
+                        alt_val = clean_currency(parts[alt_idx])
+                        if alt_val > 0:
+                            avg_price = alt_val
+                            break
+
+            if avg_price <= 0:
+                errors.append(f"Baris '{line[:40]}': tidak bisa deteksi harga rata-rata")
+                continue
+
+            note = "Porto Snapshot Stockbit"
+            if lot_note:
+                note += f" | {lot_note}"
+
+            parsed.append({
+                "ticker": ticker_raw[:4],
+                "type": "BUY",
+                "date": today,
+                "lot": lot_val,
+                "price": avg_price,
+                "fee": 0.0,
+                "tax": 0.0,
+                "notes": note,
+            })
+
+        except Exception as e:
+            errors.append(f"Baris '{line[:40]}': {str(e)}")
+
+    return parsed, errors
+
+
+def _is_stockbit_portfolio_table(raw_text: str) -> bool:
+    """
+    Deteksi apakah teks ini hasil copy-paste tabel Portfolio Stockbit
+    (tab-separated dengan banyak kolom numerik per baris).
+    """
+    lines = [l.strip() for l in raw_text.strip().split("\n") if l.strip()]
+    # Ambil sampel baris non-kosong pertama
+    for line in lines[:5]:
+        parts = re.split(r'\t|  +', line.strip())
+        parts = [p.strip() for p in parts if p.strip()]
+        # Format porto Stockbit: minimal 4 kolom, kolom pertama = ticker 4 huruf
+        if len(parts) >= 4:
+            ticker_candidate = re.sub(r'[^A-Za-z]', '', parts[0]).upper()
+            if 2 <= len(ticker_candidate) <= 6:
+                # Cek apakah ada angka di kolom ke-2 dan ke-4 (lot & harga)
+                has_lot   = re.match(r'^[\d.,]+$', parts[1]) is not None
+                has_price = any(re.match(r'^[\d.,]+$', p) for p in parts[2:5])
+                if has_lot and has_price:
+                    return True
+    return False
+
+
 def parse_pasted_text(raw_text: str) -> Tuple[List[Dict], List[str]]:
     """
-    Parser untuk teks bebas hasil copy-paste dari layar Stockbit / chat / catatan.
-    Mendukung format baris seperti:
-    - BBCA 10 lot 5900
-    - BELI MIKA 5 lot 1700
-    - GOTO 50 26
-    - TLKM BUY 15 @ 3100
-    Atau baris tabel hasil copy-paste dari web (dipisahkan spasi/tab).
+    Parser universal untuk teks hasil copy-paste.
+    Auto-deteksi format:
+    1. Tabel Portfolio Stockbit (Ctrl+C dari browser) → parse_stockbit_portfolio_table
+    2. Format bebas: "BBCA 10 lot 5900", "BELI MIKA 5 lot 1700", dll.
     """
+    # Auto-deteksi: kalau mirip tabel Stockbit, pakai parser khusus
+    if _is_stockbit_portfolio_table(raw_text):
+        return parse_stockbit_portfolio_table(raw_text)
+
+    # ── Parser format bebas (original) ───────────────────
     parsed = []
     errors = []
     lines = [l.strip() for l in raw_text.strip().split("\n") if l.strip()]
 
     for idx, line in enumerate(lines):
         try:
-            # Lewati baris header jika ada
-            if any(h in line.lower() for h in ["ticker", "saham", "emiten", "kode"]) and any(h in line.lower() for h in ["harga", "price", "lot", "qty"]):
+            # Lewati baris header
+            if any(h in line.lower() for h in ["ticker", "saham", "emiten", "kode"]) and \
+               any(h in line.lower() for h in ["harga", "price", "lot", "qty"]):
                 continue
 
-            # Cari Kode Saham (4 huruf, abaikan kata BELI/JUAL)
-            raw_words = re.findall(r"\b[A-Za-z]{4}\b", line)
-            ticker_candidates = [w.upper() for w in raw_words if w.upper() not in ["BELI", "JUAL", "SELL", "LOTS"]]
+            # Cari kode saham (4 huruf)
+            raw_words = re.findall(r"\b[A-Za-z]{3,5}\b", line)
+            exclude = {"BELI", "JUAL", "SELL", "LOTS", "LEMBAR", "SAHAM", "HARGA", "PRICE"}
+            ticker_candidates = [w.upper() for w in raw_words if w.upper() not in exclude and len(w) >= 3]
             if not ticker_candidates:
                 continue
-            ticker = ticker_candidates[0]
+            ticker = ticker_candidates[0][:4]
 
-            # Deteksi Action (BUY/SELL)
+            # Deteksi BUY / SELL
             line_upper = line.upper()
-            if any(w in line_upper for w in ["SELL", "JUAL", " S "]):
-                tx_type = "SELL"
-            else:
-                tx_type = "BUY"
+            tx_type = "SELL" if any(w in line_upper for w in ["SELL", "JUAL"]) else "BUY"
 
-            lot_val = 0
+            lot_val   = 0
             price_val = 0.0
 
-            # Pola 1: Mencari format 'X lot' secara eksplisit
+            # Pola eksplisit: X lot @ harga
             explicit_lot = re.search(r"(\d+)\s*(?:lot|lembar)", line, re.I)
             if explicit_lot:
                 lot_val = int(clean_currency(explicit_lot.group(1)))
@@ -190,26 +319,26 @@ def parse_pasted_text(raw_text: str) -> Tuple[List[Dict], List[str]]:
                 if prices:
                     price_val = float(clean_currency(prices[0]))
 
-            # Pola 2: Angka biasa (misal: BBCA 10 5900)
+            # Fallback: 2 angka pertama = lot & harga
             if lot_val <= 0 or price_val <= 0:
-                cleaned_line = re.sub(r"(?i)\b(lot|lembar|rp|shares?|buy|sell|beli|jual|harga|@)\b", " ", line)
-                cleaned_line = cleaned_line.replace(ticker, " ")
-                numbers = re.findall(r"\b\d+(?:[.,]\d+)?\b", cleaned_line)
+                cleaned = re.sub(r"(?i)\b(lot|lembar|rp|shares?|buy|sell|beli|jual|harga|@)\b", " ", line)
+                cleaned = cleaned.replace(ticker, " ")
+                numbers = re.findall(r"\b\d+(?:[.,]\d+)?\b", cleaned)
                 clean_nums = [clean_currency(n) for n in numbers if clean_currency(n) > 0]
                 if len(clean_nums) >= 2:
-                    lot_val = int(clean_nums[0])
+                    lot_val   = int(clean_nums[0])
                     price_val = float(clean_nums[1])
 
             if lot_val > 0 and price_val > 0:
                 parsed.append({
                     "ticker": ticker,
-                    "type": tx_type,
-                    "date": datetime.now().strftime("%Y-%m-%d"),
-                    "lot": lot_val,
-                    "price": price_val,
-                    "fee": 0.0,
-                    "tax": 0.0,
-                    "notes": "Input Cepat",
+                    "type":   tx_type,
+                    "date":   datetime.now().strftime("%Y-%m-%d"),
+                    "lot":    lot_val,
+                    "price":  price_val,
+                    "fee":    0.0,
+                    "tax":    0.0,
+                    "notes":  "Input Cepat",
                 })
         except Exception as e:
             errors.append(f"Baris '{line}': {str(e)}")
