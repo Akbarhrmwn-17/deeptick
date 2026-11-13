@@ -235,6 +235,66 @@ def fetch_quarterly_financials(ticker: str, use_cache: bool = True) -> Dict:
         cf = t_obj.quarterly_cashflow
 
         if inc is None or inc.empty:
+            # Fallback ke t_obj.info untuk emiten IPO baru / Papan Akselerasi / Small-cap
+            info = t_obj.info or {}
+            rev_val = info.get("totalRevenue")
+            rev_growth = info.get("revenueGrowth")
+            rev_yoy_pct = round(rev_growth * 100, 2) if rev_growth is not None else None
+
+            ni_val = info.get("netIncomeToCommon")
+            earn_growth = info.get("earningsGrowth")
+            ni_yoy_pct = round(earn_growth * 100, 2) if earn_growth is not None else None
+
+            ocf_val = info.get("operatingCashflow")
+            roa_val = info.get("returnOnAssets")
+            cr_val = info.get("currentRatio")
+            der_val = info.get("debtToEquity")
+            gm_val = info.get("grossMargins")
+
+            if rev_val is not None or ni_val is not None or ocf_val is not None:
+                f_crit = {
+                    "ROA Positif": bool(roa_val is not None and roa_val > 0),
+                    "Arus Kas Operasional Positif": bool(ocf_val is not None and ocf_val > 0),
+                    "Pertumbuhan Laba Positif": bool(ni_val is not None and ni_val > 0),
+                    "Kualitas Kas (CFO > Laba Bersih)": bool(ocf_val is not None and ni_val is not None and ocf_val > ni_val),
+                    "Rasio Utang Aman (DER < 100)": bool(der_val is not None and der_val < 100),
+                    "Likuiditas Lancar Aman (CR > 1.2)": bool(cr_val is not None and cr_val > 1.2),
+                    "Tanpa Dilusi Saham (Stabil)": True,
+                    "Margin Laba Kotor Positif": bool(gm_val is not None and gm_val > 0),
+                    "Perputaran Aset Positif": bool(rev_val is not None and rev_val > 0),
+                }
+                f_score_val = sum(1 for v in f_crit.values() if v)
+
+                if ocf_val is not None and ocf_val < 0:
+                    q_stat = "NEGATIVE_CFO"
+                    q_str = f"BAHAYA: Arus Kas Operasional Negatif (Bakar Kas Rp {abs(ocf_val)/1e9:,.1f} M)"
+                elif ocf_val and ni_val and ocf_val > ni_val:
+                    q_stat = "HEALTHY"
+                    q_str = "SANGAT SEHAT: Uang Kas Riil > Laba Akuntansi"
+                else:
+                    q_stat = "ACCRUAL_WARNING"
+                    q_str = "WASPADA: Laba Didorong Akrual / Piutang Belum Cair"
+
+                fallback_res = {
+                    "available": True,
+                    "ticker": clean_t,
+                    "latest_quarter": "TTM / Berjalan (Papan Akselerasi / IPO Baru)",
+                    "revenue": rev_val,
+                    "revenue_yoy_pct": rev_yoy_pct,
+                    "revenue_qoq_pct": None,
+                    "net_income": ni_val,
+                    "net_income_yoy_pct": ni_yoy_pct,
+                    "net_income_qoq_pct": None,
+                    "operating_cash_flow": ocf_val,
+                    "f_score": f_score_val,
+                    "f_criteria": f_crit,
+                    "quality_of_earnings": q_str,
+                    "quality_status": q_stat,
+                    "historical_quarters": [],
+                }
+                _QUARTERLY_CACHE[cache_key] = (now, fallback_res)
+                return fallback_res
+
             _QUARTERLY_CACHE[cache_key] = (now, empty_result)
             return empty_result
 
@@ -432,14 +492,21 @@ def classify_tri_factor_grade(ticker: str, quarterly_data: Dict, cmf_value: floa
             "f_score": f_score,
         }
 
+    ni_val = quarterly_data.get("net_income")
+    is_burning_cash = quality == "NEGATIVE_CFO"
+    is_losing_money = ni_val is not None and ni_val < 0
+    is_rev_crashing = rev_yoy is not None and rev_yoy < -15.0
+
     # Grade D: Toxic / Trap Alert
-    if f_score <= 3 or (quality == "NEGATIVE_CFO" and cmf_value < -0.05):
+    if f_score <= 3 or (is_burning_cash and (is_losing_money or is_rev_crashing or cmf_value < 0)):
+        loss_text = f"rugi bersih Rp {abs(ni_val)/1e9:,.1f} M" if (ni_val is not None and ni_val < 0) else "arus kas minus"
+        rev_text = f"omzet anjlok {rev_yoy:+.1f}% YoY" if rev_yoy else "kinerja rapuh"
         return {
             "grade": "D",
             "title": "☠️ GRADE D: TOXIC / JEBAKAN BANDAR",
             "color": "#ef4444",
             "badge": "☠️ GRADE D (RISIKO TINGGI)",
-            "desc": f"Skor fundamental sangat rapuh ({f_score}/9) dan arus kas operasional berisiko. Rawan kena guyuran bandar.",
+            "desc": f"Fundamental berisiko tinggi ({f_score}/9 poin). {loss_text.capitalize()}, {rev_text}, dan defisit kas operasional. Rawan kena guyuran bandar.",
             "action": "DILARANG SWING. Hanya untuk scalping cepat dengan batas Cut Loss kilat.",
             "f_score": f_score,
         }

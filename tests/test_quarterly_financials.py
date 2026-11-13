@@ -41,6 +41,19 @@ def test_quarterly_financials_kota():
     assert "quality_status" in data
 
 
+def test_quarterly_financials_meja():
+    data = fetch_quarterly_financials("MEJA", use_cache=False)
+    assert data["available"] is True
+    assert data["ticker"] == "MEJA"
+    assert data["revenue"] is not None
+    assert data["operating_cash_flow"] is not None
+    assert data["quality_status"] == "NEGATIVE_CFO"
+
+    grade = classify_tri_factor_grade("MEJA", data, cmf_value=0.0)
+    assert grade["grade"] == "D"
+    assert "GRADE D" in grade["title"]
+
+
 def test_tri_factor_classifier_edge_cases():
     empty_data = {"available": False, "f_score": 0}
     gr_empty = classify_tri_factor_grade("XYZ", empty_data)
@@ -56,5 +69,6 @@ if __name__ == "__main__":
     test_quarterly_financials_bbca()
     test_quarterly_financials_ptba()
     test_quarterly_financials_kota()
+    test_quarterly_financials_meja()
     test_tri_factor_classifier_edge_cases()
     print("All tests passed successfully!")

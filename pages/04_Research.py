@@ -50,12 +50,14 @@ with st.sidebar:
     )
     stock_info = next((s for s in watchlist if s["ticker"] == selected), {})
 
-    if st.button("🔄 Refresh Semua Data", use_container_width=True):
-        with st.spinner("Mengambil data..."):
+    if st.button("🔄 Refresh Semua Data", width="stretch"):
+        with st.spinner("Mengambil data terbaru..."):
             fetch_price_history(selected, period="2y", save_to_db=True)
             fund = get_all_fundamental(selected)
             if fund:
                 upsert_fundamental(selected, fund)
+            from data.fundamental import fetch_quarterly_financials
+            fetch_quarterly_financials(selected, use_cache=False)
         st.success("Data diperbarui!")
         st.rerun()
 
@@ -433,11 +435,50 @@ with tab_fund:
     rev_qoq = q_fund.get("revenue_qoq_pct")
     ni_yoy = q_fund.get("net_income_yoy_pct")
     ni_qoq = q_fund.get("net_income_qoq_pct")
+    rev_nom = q_fund.get("revenue")
+    ni_nom = q_fund.get("net_income")
+    ocf_nom = q_fund.get("operating_cash_flow")
 
-    q_col1.metric("Pendapatan (YoY)", f"{rev_yoy:+.2f}%" if rev_yoy is not None else "—", "Pertumbuhan Tahunan")
-    q_col2.metric("Pendapatan (QoQ)", f"{rev_qoq:+.2f}%" if rev_qoq is not None else "—", "Percepatan Kuartalan")
-    q_col3.metric("Laba Bersih (YoY)", f"{ni_yoy:+.2f}%" if ni_yoy is not None else "—", "Pertumbuhan Laba", delta_color="normal")
-    q_col4.metric("Laba Bersih (QoQ)", f"{ni_qoq:+.2f}%" if ni_qoq is not None else "—", "Momentum Laba", delta_color="normal")
+    def fmt_idr_short(val):
+        if val is None: return "—"
+        if abs(val) >= 1e12: return f"Rp {val/1e12:.2f} T"
+        if abs(val) >= 1e9:  return f"Rp {val/1e9:.2f} M"
+        if abs(val) >= 1e6:  return f"Rp {val/1e6:.1f} Jt"
+        return f"Rp {val:,.0f}"
+
+    # Metric 1: Pertumbuhan Pendapatan YoY
+    if rev_yoy is not None:
+        q_col1.metric("Pendapatan (YoY)", f"{rev_yoy:+.2f}%", fmt_idr_short(rev_nom) if rev_nom else "Pertumbuhan Tahunan")
+    elif rev_nom is not None:
+        q_col1.metric("Total Pendapatan", fmt_idr_short(rev_nom), "Akumulasi Berjalan")
+    else:
+        q_col1.metric("Pendapatan (YoY)", "—", "Pertumbuhan Tahunan")
+
+    # Metric 2: Pendapatan QoQ atau Total Omzet
+    if rev_qoq is not None:
+        q_col2.metric("Pendapatan (QoQ)", f"{rev_qoq:+.2f}%", "Percepatan Kuartalan")
+    elif rev_nom is not None and rev_yoy is not None:
+        q_col2.metric("Omzet Tahunan", fmt_idr_short(rev_nom), f"YoY: {rev_yoy:+.1f}%")
+    else:
+        q_col2.metric("Pendapatan (QoQ)", "—", "Percepatan Kuartalan")
+
+    # Metric 3: Laba Bersih
+    if ni_yoy is not None:
+        q_col3.metric("Laba Bersih (YoY)", f"{ni_yoy:+.2f}%", fmt_idr_short(ni_nom) if ni_nom else "Pertumbuhan Laba", delta_color="normal")
+    elif ni_nom is not None:
+        status_laba = "Defisit / Rugi" if ni_nom < 0 else "Untung"
+        q_col3.metric("Laba Bersih", fmt_idr_short(ni_nom), status_laba, delta_color="normal" if ni_nom >= 0 else "inverse")
+    else:
+        q_col3.metric("Laba Bersih (YoY)", "—", "Pertumbuhan Laba")
+
+    # Metric 4: Arus Kas Operasional (Real Cash)
+    if ocf_nom is not None:
+        status_kas = "Bakar Kas (Defisit)" if ocf_nom < 0 else "Kas Riil Masuk"
+        q_col4.metric("Kas Operasional (CFO)", fmt_idr_short(ocf_nom), status_kas, delta_color="normal" if ocf_nom >= 0 else "inverse")
+    elif ni_qoq is not None:
+        q_col4.metric("Laba Bersih (QoQ)", f"{ni_qoq:+.2f}%", "Momentum Laba", delta_color="normal")
+    else:
+        q_col4.metric("Laba Bersih (QoQ)", "—", "Momentum Laba")
 
     # Earnings Quality Alert
     q_status = q_fund.get("quality_status", "UNKNOWN")
