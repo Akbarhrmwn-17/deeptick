@@ -209,6 +209,31 @@ def render_position_sizing_calculator(ticker: str, entry: float, tp: float, sl: 
                 st.caption("ℹ️ *Ukuran lot dibatasi oleh 100% daya beli modal kas agar tidak melebihi modal.*")
 
 
+@st.cache_data(ttl=1800, show_spinner=False)
+def get_quick_tri_factor_badge(ticker: str, cmf_val: float = 0.0) -> dict:
+    try:
+        from data.fundamental import fetch_quarterly_financials, classify_tri_factor_grade
+        q = fetch_quarterly_financials(ticker)
+        gr = classify_tri_factor_grade(ticker, q, cmf_value=cmf_val)
+        return {
+            "badge": gr.get("badge", "GRADE N/A"),
+            "grade": gr.get("grade", "C"),
+            "color": gr.get("color", "#888"),
+            "f_score": q.get("f_score", 0),
+            "quality": q.get("quality_status", "UNKNOWN"),
+            "warning": gr.get("grade") == "D",
+        }
+    except Exception:
+        return {
+            "badge": "GRADE C (SPEKULATIF)",
+            "grade": "C",
+            "color": "#f59e0b",
+            "f_score": 0,
+            "quality": "UNKNOWN",
+            "warning": False,
+        }
+
+
 # ── IHSG MACRO REGIME BANNER ──────────────────────────────────
 
 @st.cache_data(ttl=300, show_spinner=False)
@@ -356,7 +381,20 @@ with tab_scalping:
                     st.markdown(f"### **{t}** — {row['name']}")
                     st.markdown(f"🏷️ `{row['sector']}` | **Harga Running:** `Rp {row['price']:,.0f}` ({row['change_pct']:+.2f}%)")
                     st.markdown(f"🎯 **Setup:** `{row['setup_name']}`")
-                    
+
+                    # Institutional Tri-Factor Grade & F-Score
+                    tf_meta = get_quick_tri_factor_badge(t, row.get("cmf_val", 0.0))
+                    tf_col = tf_meta["color"]
+                    st.markdown(
+                        f"<div style='margin-bottom:6px;'>"
+                        f"<span style='background:{tf_col}22; color:{tf_col}; border:1px solid {tf_col}; padding:2px 8px; border-radius:6px; font-size:0.8rem; font-weight:700;'>{tf_meta['badge']}</span> "
+                        f"<span style='color:#8b949e; font-size:0.8rem; margin-left:4px;'>F-Score: {tf_meta['f_score']}/9</span>"
+                        f"</div>",
+                        unsafe_allow_html=True
+                    )
+                    if tf_meta["warning"]:
+                        st.markdown("<span style='color:#ef4444; font-size:0.8rem; font-weight:bold;'>⚠️ Fundamental Rapuh: Cut loss disiplin.</span>", unsafe_allow_html=True)
+
                     # Live Buy Zone Status Indicator
                     b_badge = row.get("zone_badge", "NEUTRAL")
                     b_class = "badge-bull" if b_badge == "BUY" else ("badge-chase" if b_badge == "CHASE" else ("badge-loss" if b_badge == "LOSS" else ("badge-warn" if b_badge == "WARN" else "badge-neutral")))
@@ -456,6 +494,18 @@ with tab_smart_money:
                     st.markdown(f"### **{t}** — {row['name']}")
                     st.markdown(f"🏷️ `{row['sector']}` | **Harga:** `Rp {row['price']:,.0f}` ({row['change_pct']:+.2f}%)")
                     st.markdown(f"Status: **{row['tier']}**")
+
+                    # Institutional Tri-Factor Grade & F-Score
+                    tf_meta = get_quick_tri_factor_badge(t, row.get("cmf_val", 0.0))
+                    tf_col = tf_meta["color"]
+                    st.markdown(
+                        f"<div style='margin-bottom:6px;'>"
+                        f"<span style='background:{tf_col}22; color:{tf_col}; border:1px solid {tf_col}; padding:2px 8px; border-radius:6px; font-size:0.8rem; font-weight:700;'>{tf_meta['badge']}</span> "
+                        f"<span style='color:#8b949e; font-size:0.8rem; margin-left:4px;'>F-Score: {tf_meta['f_score']}/9</span>"
+                        f"</div>",
+                        unsafe_allow_html=True
+                    )
+
                     if row.get("is_bull_div"):
                         st.markdown("<span style='background:#1e3a5f; color:#60a5fa; padding:3px 8px; border-radius:6px; font-weight:700;'>🔥 BULLISH DIVERGENCE</span>", unsafe_allow_html=True)
                     st.caption(f"💡 *{row.get('div_note', '')}*")
@@ -557,6 +607,20 @@ with tab_swing:
                 with col_info:
                     st.markdown(f"### **{t}** — {row['name']}")
                     st.markdown(f"🏷️ **Sektor:** `{row['sector']}` | **Harga:** `Rp {row['price']:,.0f}` ({row['change_pct']:+.2f}%)")
+
+                    # Institutional Tri-Factor Grade & F-Score
+                    tf_meta = get_quick_tri_factor_badge(t, 0.05)
+                    tf_col = tf_meta["color"]
+                    st.markdown(
+                        f"<div style='margin-bottom:6px;'>"
+                        f"<span style='background:{tf_col}22; color:{tf_col}; border:1px solid {tf_col}; padding:2px 8px; border-radius:6px; font-size:0.8rem; font-weight:700;'>{tf_meta['badge']}</span> "
+                        f"<span style='color:#8b949e; font-size:0.8rem; margin-left:4px;'>F-Score: {tf_meta['f_score']}/9</span>"
+                        f"</div>",
+                        unsafe_allow_html=True
+                    )
+                    if tf_meta["warning"]:
+                        st.markdown("<span style='color:#ef4444; font-size:0.8rem; font-weight:bold;'>⚠️ Fundamental Berisiko untuk Swing!</span>", unsafe_allow_html=True)
+
                     st.markdown(f"📊 **Konfirmasi:** *{row['setup']}*")
                     st.markdown(f"📍 **Jarak ke MA20:** `{row['dist_ma20']:+.1f}%`")
 

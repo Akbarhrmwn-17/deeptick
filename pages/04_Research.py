@@ -393,12 +393,148 @@ with tab_tech:
 # TAB FUNDAMENTAL
 # ════════════════════════════════════════════════════════
 with tab_fund:
-    if not fund:
-        st.info("Belum ada data fundamental. Klik **Refresh Semua Data** di sidebar.")
-    else:
-        st.subheader("📊 Data Fundamental")
-        col1, col2, col3, col4 = st.columns(4)
+    from data.fundamental import fetch_quarterly_financials, classify_tri_factor_grade
 
+    # Calculate CMF for Smart Money factor
+    cmf_val = 0.0
+    if not df_raw.empty and len(df_raw) >= 20:
+        from analysis.technical import get_smart_money_flow
+        smf_calc = get_smart_money_flow(df_raw)
+        cmf_val = smf_calc.get("cmf", 0.0) or 0.0
+
+    with st.spinner("Menganalisis Laporan Keuangan Kuartalan & Skor Forensik..."):
+        q_fund = fetch_quarterly_financials(selected)
+        grade_info = classify_tri_factor_grade(selected, q_fund, cmf_value=cmf_val)
+
+    # 1. Tri-Factor Institutional Grade Banner
+    g_col = grade_info["color"]
+    st.markdown(f"""
+    <div style="background-color: {g_col}18; border-left: 6px solid {g_col}; border-radius: 8px; padding: 14px 18px; margin-bottom: 20px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;">
+            <div>
+                <span style="font-size: 1.25rem; font-weight: 800; color: {g_col};">{grade_info["title"]}</span>
+                <p style="margin: 6px 0 4px 0; color: #e6edf3; font-size: 0.95rem;">{grade_info["desc"]}</p>
+                <p style="margin: 0; color: #8b949e; font-size: 0.88rem;">🎯 <b>Saran Tindakan:</b> {grade_info["action"]}</p>
+            </div>
+            <div style="text-align: right;">
+                <span style="font-size: 0.85rem; color: #8b949e;">Piotroski F-Score:</span><br/>
+                <span style="font-size: 1.8rem; font-weight: 900; color: {g_col};">{q_fund.get('f_score', 0)} / 9</span>
+            </div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # 2. Pertumbuhan Kinerja Kuartalan (YoY & QoQ)
+    st.subheader(f"📈 Pertumbuhan Laporan Keuangan Kuartalan (Periode: {q_fund.get('latest_quarter', '-')})")
+    st.caption("Standar CANSLIM (William O'Neil) & Minervini: Saham super-performance biasanya menunjukkan lonjakan laba kuartalan YoY > 20%.")
+
+    q_col1, q_col2, q_col3, q_col4 = st.columns(4)
+    rev_yoy = q_fund.get("revenue_yoy_pct")
+    rev_qoq = q_fund.get("revenue_qoq_pct")
+    ni_yoy = q_fund.get("net_income_yoy_pct")
+    ni_qoq = q_fund.get("net_income_qoq_pct")
+
+    q_col1.metric("Pendapatan (YoY)", f"{rev_yoy:+.2f}%" if rev_yoy is not None else "—", "Pertumbuhan Tahunan")
+    q_col2.metric("Pendapatan (QoQ)", f"{rev_qoq:+.2f}%" if rev_qoq is not None else "—", "Percepatan Kuartalan")
+    q_col3.metric("Laba Bersih (YoY)", f"{ni_yoy:+.2f}%" if ni_yoy is not None else "—", "Pertumbuhan Laba", delta_color="normal")
+    q_col4.metric("Laba Bersih (QoQ)", f"{ni_qoq:+.2f}%" if ni_qoq is not None else "—", "Momentum Laba", delta_color="normal")
+
+    # Earnings Quality Alert
+    q_status = q_fund.get("quality_status", "UNKNOWN")
+    q_text = q_fund.get("quality_of_earnings", "Data Tidak Tersedia")
+    if q_status == "HEALTHY":
+        st.success(f"🟢 **Kualitas Laba (Cash Flow Quality):** {q_text}")
+    elif q_status == "ACCRUAL_WARNING":
+        st.warning(f"⚠️ **Kualitas Laba (Cash Flow Quality):** {q_text}")
+    elif q_status == "NEGATIVE_CFO":
+        st.error(f"🛑 **Kualitas Laba (Cash Flow Quality):** {q_text}")
+    else:
+        st.info(f"ℹ️ **Kualitas Laba:** {q_text}")
+
+    # Historical Quarters Chart
+    hist_q = q_fund.get("historical_quarters", [])
+    if hist_q and len(hist_q) >= 2:
+        df_hq = pd.DataFrame(hist_q)
+        fig_q = go.Figure()
+        fig_q.add_trace(go.Bar(
+            x=df_hq["date"],
+            y=df_hq["revenue"] / 1e9,
+            name="Pendapatan (Miliar Rp)",
+            marker_color="#38bdf8",
+        ))
+        fig_q.add_trace(go.Bar(
+            x=df_hq["date"],
+            y=df_hq["net_income"] / 1e9,
+            name="Laba Bersih (Miliar Rp)",
+            marker_color="#22c55e",
+        ))
+        fig_q.update_layout(
+            barmode="group",
+            template="plotly_dark",
+            height=280,
+            margin=dict(l=10, r=10, t=25, b=10),
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+            xaxis=dict(title="Kuartal"),
+            yaxis=dict(title="Miliar Rp"),
+        )
+        st.plotly_chart(fig_q, width="stretch")
+
+    st.divider()
+
+    # 3. Piotroski F-Score Checklist (Forensik 9 Parameter)
+    st.subheader(f"🛡️ Bedah Forensik Piotroski F-Score ({q_fund.get('f_score', 0)} / 9 Poin)")
+    st.caption("Piotroski F-Score menguji 9 metrik fundamental untuk membedakan emiten berkinerja unggul dari saham rapuh yang rentan jeblok.")
+
+    f_crit = q_fund.get("f_criteria", {})
+    if f_crit:
+        fc1, fc2, fc3 = st.columns(3)
+        with fc1:
+            st.markdown("##### 💵 1. Profitabilitas (Maks 4)")
+            p_keys = [
+                "ROA Positif",
+                "Arus Kas Operasional Positif",
+                "Pertumbuhan ROA (ΔROA > 0)",
+                "Kualitas Kas (CFO > Laba Bersih)",
+            ]
+            for k in p_keys:
+                passed = f_crit.get(k, False)
+                icon = "✅" if passed else "❌"
+                col = "#22c55e" if passed else "#ef4444"
+                st.markdown(f"{icon} <span style='color:{col};'>{k}</span>", unsafe_allow_html=True)
+
+        with fc2:
+            st.markdown("##### 🏦 2. Likuiditas & Utang (Maks 3)")
+            l_keys = [
+                "Rasio Utang Menurun (ΔLeverage ≤ 0)",
+                "Likuiditas Lancar Naik (ΔCR > 0)",
+                "Tanpa Dilusi Saham (Saham Beredar Stabil)",
+            ]
+            for k in l_keys:
+                passed = f_crit.get(k, False)
+                icon = "✅" if passed else "❌"
+                col = "#22c55e" if passed else "#ef4444"
+                st.markdown(f"{icon} <span style='color:{col};'>{k}</span>", unsafe_allow_html=True)
+
+        with fc3:
+            st.markdown("##### ⚙️ 3. Efisiensi Operasional (Maks 2)")
+            e_keys = [
+                "Margin Laba Kotor Naik (ΔMargin > 0)",
+                "Perputaran Aset Naik (ΔTurnover > 0)",
+            ]
+            for k in e_keys:
+                passed = f_crit.get(k, False)
+                icon = "✅" if passed else "❌"
+                col = "#22c55e" if passed else "#ef4444"
+                st.markdown(f"{icon} <span style='color:{col};'>{k}</span>", unsafe_allow_html=True)
+
+    st.divider()
+
+    # 4. Rasio Tradisional & Valuasi
+    st.subheader("📊 Rasio Valuasi Tradisional")
+    if not fund:
+        st.info("Data valuasi umum belum tersimpan di DB lokal. Klik Refresh di sidebar.")
+    else:
+        col1, col2, col3, col4 = st.columns(4)
         def fmt_num(val, prefix="", suffix="", decimals=2):
             if val is None: return "—"
             if abs(val) >= 1e12: return f"{prefix}{val/1e12:.1f}T{suffix}"
@@ -434,38 +570,17 @@ with tab_fund:
             rev = fund.get("revenue")
             st.metric("Revenue", fmt_num(rev, prefix="Rp "))
 
+    # 5. Profil Dividen & Aksi Korporasi
+    from data.fundamental import fetch_dividend_info
+    div_spec = fetch_dividend_info(selected)
+    if div_spec.get("dividend_yield", 0) > 0 or div_spec.get("ex_dividend_date") != "-":
         st.divider()
-
-        # Fundamental Scorecard
-        st.subheader("🎯 Scorecard Fundamental")
-        fund_items = [
-            ("P/E Ratio", fund.get("pe_ratio"), lambda v: "✅ Value (< 15)" if v < 15 else ("⚠️ Wajar (15-30)" if v < 30 else "❌ Mahal (> 30)")),
-            ("P/B Ratio", fund.get("pb_ratio"), lambda v: "✅ Murah (< 1)" if v < 1 else ("⚠️ Wajar (1-3)" if v < 3 else "❌ Mahal (> 3)")),
-            ("ROE",       fund.get("roe"),       lambda v: "✅ Bagus (> 20%)" if v > 0.2 else ("⚠️ OK (10-20%)" if v > 0.1 else "❌ Lemah (< 10%)")),
-            ("DER",       fund.get("der"),       lambda v: "✅ Aman (< 1)" if v < 1 else ("⚠️ Moderat (1-2)" if v < 2 else "❌ Berisiko (> 2)")),
-        ]
-
-        for name, val, evaluator in fund_items:
-            if val is not None:
-                try:
-                    assessment = evaluator(float(val))
-                    st.markdown(f"**{name}**: {val:.2f} — {assessment}")
-                except Exception:
-                    st.markdown(f"**{name}**: {val}")
-
-        st.caption(f"Data diambil: {fund.get('fetched_at', 'N/A')}")
-
-        # Profil Dividen & Aksi Korporasi
-        from data.fundamental import fetch_dividend_info
-        div_spec = fetch_dividend_info(selected)
-        if div_spec.get("dividend_yield", 0) > 0 or div_spec.get("ex_dividend_date") != "-":
-            st.divider()
-            st.subheader("💰 Profil Dividen & Aksi Korporasi")
-            cd1, cd2, cd3, cd4 = st.columns(4)
-            cd1.metric("Dividend Yield", f"{div_spec['dividend_yield']}%")
-            cd2.metric("Dividen Terakhir", f"Rp {div_spec['last_dividend']:,.1f} / lbr")
-            cd3.metric("Tanggal Ex-Dividend", div_spec['ex_dividend_date'])
-            cd4.metric("Payout Ratio", f"{div_spec['payout_ratio']}%")
+        st.subheader("💰 Profil Dividen & Aksi Korporasi")
+        cd1, cd2, cd3, cd4 = st.columns(4)
+        cd1.metric("Dividend Yield", f"{div_spec['dividend_yield']}%")
+        cd2.metric("Dividen Terakhir", f"Rp {div_spec['last_dividend']:,.1f} / lbr")
+        cd3.metric("Tanggal Ex-Dividend", div_spec['ex_dividend_date'])
+        cd4.metric("Payout Ratio", f"{div_spec['payout_ratio']}%")
 
 
 # ════════════════════════════════════════════════════════
